@@ -7,6 +7,26 @@ import pandas as pd
 from db import save_attendance
 from db import save_login
 from pymongo import MongoClient
+from fastapi import FastAPI
+from pymongo import MongoClient
+from datetime import datetime
+
+app = FastAPI()
+
+client = MongoClient("YOUR_MONGO_ATLAS_URL")
+db = client["attendence_db"]
+
+@app.get("/")
+def home():
+    return {"message": "API Running"}
+
+@app.post("/login")
+def login(username: str):
+     db["users"].insert_one({
+        "username": username,
+        "time": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    })
+     return {"status": "saved"}
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["attendence_db"]
