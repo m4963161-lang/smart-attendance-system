@@ -14,7 +14,7 @@ from datetime import datetime
 app = FastAPI()
 
 client = MongoClient("YOUR_MONGO_ATLAS_URL")
-db = client["attendence_db"]
+db = client["attendance_db"]
 
 @app.get("/")
 def home():
@@ -22,11 +22,12 @@ def home():
 
 @app.post("/login")
 def login(username: str):
-     db["users"].insert_one({
+    db["users"].insert_one({
         "username": username,
-        "time": datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "date": datetime.now().strftime("%d-%m-%Y")
     })
-     return {"status": "saved"}
+    return {"status": "saved"}
 
 client = MongoClient("mongodb://localhost:27017/")
 db = client["attendence_db"]
