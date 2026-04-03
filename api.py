@@ -12,7 +12,7 @@ def home():
     return {"message": "API Running"}
 
 # Save attendance
-@app.post("/attendance")
+@app.get("/attendance")
 def mark_attendance(name: str):
     record = {
         "name": name,
