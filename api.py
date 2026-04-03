@@ -3,7 +3,7 @@ from datetime import datetime
 
 app = FastAPI()
 
-# Temporary storage (no MongoDB needed)
+# Temporary storage (works online)
 attendance_data = []
 
 # Home route
@@ -11,7 +11,7 @@ attendance_data = []
 def home():
     return {"message": "API Running"}
 
-# Save attendance
+# ✅ Attendance (GET → works in browser)
 @app.get("/attendance")
 def mark_attendance(name: str):
     record = {
@@ -20,7 +20,10 @@ def mark_attendance(name: str):
         "date": datetime.now().strftime("%d-%m-%Y")
     }
     attendance_data.append(record)
-    return {"status": "saved", "data": record}
+    return {
+        "status": "saved",
+        "data": record
+    }
 
 # Get all records
 @app.get("/records")
