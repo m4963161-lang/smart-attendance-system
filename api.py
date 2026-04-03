@@ -1,22 +1,23 @@
 from fastapi import FastAPI
 from datetime import datetime
 from pymongo import MongoClient
+import certifi
 
 app = FastAPI()
 
-# 🔗 MongoDB Atlas Connection (REPLACE PASSWORD)
+# ✅ MongoDB Atlas URL (PUT YOUR REAL PASSWORD)
 MONGO_URL = "mongodb+srv://admin:1234@cluster0.nmyolcj.mongodb.net/attendance_db?retryWrites=true&w=majority"
 
-client = MongoClient(MONGO_URL)
+# ✅ FIX: SSL CERTIFICATE
+client = MongoClient(MONGO_URL, tlsCAFile=certifi.where())
+
 db = client["attendance_db"]
 collection = db["records"]
 
-# ✅ Home
 @app.get("/")
 def home():
     return {"message": "API Running"}
 
-# ✅ Save Attendance (browser + camera both work)
 @app.get("/attendance")
 def mark_attendance(name: str):
     record = {
@@ -25,15 +26,16 @@ def mark_attendance(name: str):
         "date": datetime.now().strftime("%d-%m-%Y")
     }
 
-    collection.insert_one(record)
+    try:
+        collection.insert_one(record)
+        return {"status": "saved"}
+    except Exception as e:
+        return {"error": str(e)}
 
-    return {
-        "status": "saved",
-        "data": record
-    }
-
-# ✅ Get All Records
 @app.get("/records")
 def get_records():
-    data = list(collection.find({}, {"_id": 0}))
-    return {"data": data}
+    try:
+        data = list(collection.find({}, {"_id": 0}))
+        return {"data": data}
+    except Exception as e:
+        return {"error": str(e)}
