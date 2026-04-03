@@ -1,17 +1,22 @@
 from fastapi import FastAPI
 from datetime import datetime
+from pymongo import MongoClient
 
 app = FastAPI()
 
-# Temporary storage (works online)
-attendance_data = []
+# 🔗 MongoDB Atlas Connection (REPLACE PASSWORD)
+MONGO_URL = "mongodb+srv://admin:1234@cluster0.nmyolcj.mongodb.net/attendance_db?retryWrites=true&w=majority"
 
-# Home route
+client = MongoClient(MONGO_URL)
+db = client["attendance_db"]
+collection = db["records"]
+
+# ✅ Home
 @app.get("/")
 def home():
     return {"message": "API Running"}
 
-# ✅ Attendance (GET → works in browser)
+# ✅ Save Attendance (browser + camera both work)
 @app.get("/attendance")
 def mark_attendance(name: str):
     record = {
@@ -19,13 +24,16 @@ def mark_attendance(name: str):
         "time": datetime.now().strftime("%H:%M:%S"),
         "date": datetime.now().strftime("%d-%m-%Y")
     }
-    attendance_data.append(record)
+
+    collection.insert_one(record)
+
     return {
         "status": "saved",
         "data": record
     }
 
-# Get all records
+# ✅ Get All Records
 @app.get("/records")
 def get_records():
-    return {"data": attendance_data}
+    data = list(collection.find({}, {"_id": 0}))
+    return {"data": data}

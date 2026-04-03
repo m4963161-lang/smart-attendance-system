@@ -3,12 +3,11 @@ import face_recognition
 import os
 import numpy as np
 import requests
-import time
 
-# 🔗 FULL Render API URL (IMPORTANT)
-API_URL = "https://smart-attendance-system-gsut.onrender.com/login"
+# 🌐 Your LIVE API
+API_URL = "https://smart-attendance-system-gsut.onrender.com/attendance"
 
-# 📁 Load images
+# 📂 Load images
 path = 'images'
 images = []
 classNames = []
@@ -27,77 +26,62 @@ def findEncodings(images):
     encodeList = []
     for img in images:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        encodes = face_recognition.face_encodings(img)
-        if encodes:
-            encodeList.append(encodes[0])
+        enc = face_recognition.face_encodings(img)
+        if enc:
+            encodeList.append(enc[0])
     return encodeList
 
 encodeListKnown = findEncodings(images)
 print("✅ Encoding Complete")
 
+# 📡 Send attendance to API
+def send_to_api(name):
+    try:
+        res = requests.get(API_URL, params={"name": name})
+        print("📡 Sent:", res.json())
+    except:
+        print("❌ API Error")
+
 # 🎥 Start camera
 cap = cv2.VideoCapture(0)
 
-marked = set()  # prevent duplicate API calls
+markedNames = set()  # prevent duplicates
 
 while True:
     success, img = cap.read()
     if not success:
         break
 
-    imgS = cv2.resize(img, (0, 0), None, 0.25, 0.25)
+    imgS = cv2.resize(img, (0,0), None, 0.25, 0.25)
     imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
 
-    faces = face_recognition.face_locations(imgS)
-    encodes = face_recognition.face_encodings(imgS, faces)
+    facesCurFrame = face_recognition.face_locations(imgS)
+    encodesCurFrame = face_recognition.face_encodings(imgS, facesCurFrame)
 
-    for encodeFace, faceLoc in zip(encodes, faces):
-
+    for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
+        matches = face_recognition.compare_faces(encodeListKnown, encodeFace)
         faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
+
         matchIndex = np.argmin(faceDis)
 
-        name = "UNKNOWN"
-
-        if faceDis[matchIndex] < 0.5:
+        if matches[matchIndex]:
             name = classNames[matchIndex].upper()
 
-            # 🔥 Send to API (only once per person)
-            if name not in marked:
-                try:
-                    print(f"📡 Sending {name} to API...")
+            # Send only once
+            if name not in markedNames:
+                send_to_api(name)
+                markedNames.add(name)
 
-                    response = requests.post(
-                        API_URL,
-                        params={"username": name},
-                        timeout=10
-                    )
+            y1, x2, y2, x1 = faceLoc
+            y1, x2, y2, x1 = y1*4, x2*4, y2*4, x1*4
 
-                    print("📡 Status:", response.status_code)
-                    print("📡 Response:", response.text)
+            cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0), 2)
+            cv2.putText(img, name, (x1,y2+25),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
 
-                    if response.status_code == 200:
-                        print("✅ Attendance Marked:", name)
-                        marked.add(name)
-                    else:
-                        print("❌ API Error:", response.status_code)
+    cv2.imshow('Smart Attendance System', img)
 
-                except Exception as e:
-                    print("❌ Connection Error:", e)
-                    print("⏳ Retrying in 5 seconds...")
-                    time.sleep(5)
-
-        # 🎯 Draw rectangle
-        y1, x2, y2, x1 = faceLoc
-        y1, x2, y2, x1 = y1*4, x2*4, y2*4, x1*4
-
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(img, name, (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-    cv2.imshow("Smart Attendance System", img)
-
-    # ❌ Press Q to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) == 13:
         break
 
 cap.release()
