@@ -2,114 +2,103 @@ import cv2
 import face_recognition
 import os
 import numpy as np
-from datetime import datetime
+import requests
+import time
 
-# Path to images
+# 🔗 FULL Render API URL (IMPORTANT)
+API_URL = "https://smart-attendance-system-gsut.onrender.com/login"
+
+# 📁 Load images
 path = 'images'
-
-# Auto-create folder if not exists
-if not os.path.exists(path):
-    os.makedirs(path)
-    print("📁 'images' folder created. Add student images and run again.")
-    exit()
-
 images = []
 classNames = []
 
-# Load images
 for cl in os.listdir(path):
-    curImg = cv2.imread(f'{path}/{cl}')
-    if curImg is None:
+    img = cv2.imread(f'{path}/{cl}')
+    if img is None:
         continue
-    images.append(curImg)
+    images.append(img)
     classNames.append(os.path.splitext(cl)[0])
 
 print("Loaded Students:", classNames)
 
-# Encode faces
+# 🔍 Encode faces
 def findEncodings(images):
     encodeList = []
     for img in images:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        encodings = face_recognition.face_encodings(img)
-
-        if len(encodings) > 0:
-            encodeList.append(encodings[0])
-        else:
-            print("⚠️ No face found in one image, skipping...")
-
+        encodes = face_recognition.face_encodings(img)
+        if encodes:
+            encodeList.append(encodes[0])
     return encodeList
 
-# Mark attendance
-def markAttendance(name):
-    with open('attendance.csv', 'a+') as f:
-        f.seek(0)
-        data = f.readlines()
-        nameList = [line.split(',')[0] for line in data]
-
-        if name not in nameList:
-            now = datetime.now()
-            dtString = now.strftime('%H:%M:%S')
-            f.writelines(f'\n{name},{dtString}')
-            print(f"✅ Attendance Marked: {name}")
-
-# Encode known faces
 encodeListKnown = findEncodings(images)
 print("✅ Encoding Complete")
 
-# Start webcam
+# 🎥 Start camera
 cap = cv2.VideoCapture(0)
+
+marked = set()  # prevent duplicate API calls
 
 while True:
     success, img = cap.read()
     if not success:
-        print("❌ Camera not working")
         break
 
-    # Resize for faster processing
     imgS = cv2.resize(img, (0, 0), None, 0.25, 0.25)
     imgS = cv2.cvtColor(imgS, cv2.COLOR_BGR2RGB)
 
-    # Detect faces
-    facesCurFrame = face_recognition.face_locations(imgS)
-    encodesCurFrame = face_recognition.face_encodings(imgS, facesCurFrame)
+    faces = face_recognition.face_locations(imgS)
+    encodes = face_recognition.face_encodings(imgS, faces)
 
-    for encodeFace, faceLoc in zip(encodesCurFrame, facesCurFrame):
+    for encodeFace, faceLoc in zip(encodes, faces):
 
-        if len(encodeListKnown) == 0:
-            continue
-
-        matches = face_recognition.compare_faces(encodeListKnown, encodeFace, tolerance=0.5)
         faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
-
         matchIndex = np.argmin(faceDis)
 
-        # Default name
         name = "UNKNOWN"
 
-        if matches[matchIndex] and faceDis[matchIndex] < 0.5:
+        if faceDis[matchIndex] < 0.5:
             name = classNames[matchIndex].upper()
 
-        # Scale back face location
+            # 🔥 Send to API (only once per person)
+            if name not in marked:
+                try:
+                    print(f"📡 Sending {name} to API...")
+
+                    response = requests.post(
+                        API_URL,
+                        params={"username": name},
+                        timeout=10
+                    )
+
+                    print("📡 Status:", response.status_code)
+                    print("📡 Response:", response.text)
+
+                    if response.status_code == 200:
+                        print("✅ Attendance Marked:", name)
+                        marked.add(name)
+                    else:
+                        print("❌ API Error:", response.status_code)
+
+                except Exception as e:
+                    print("❌ Connection Error:", e)
+                    print("⏳ Retrying in 5 seconds...")
+                    time.sleep(5)
+
+        # 🎯 Draw rectangle
         y1, x2, y2, x1 = faceLoc
         y1, x2, y2, x1 = y1*4, x2*4, y2*4, x1*4
 
-        # Draw rectangle
         cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.rectangle(img, (x1, y2-35), (x2, y2), (0, 255, 0), cv2.FILLED)
-        cv2.putText(img, name, (x1+6, y2-6),
-                    cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(img, name, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-        # Mark attendance if recognized
-        if name != "UNKNOWN":
-            markAttendance(name)
+    cv2.imshow("Smart Attendance System", img)
 
-    cv2.imshow('Smart Attendance System', img)
-
-    # Press ENTER to exit
-    if cv2.waitKey(1) == 13:
+    # ❌ Press Q to exit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()
 cv2.destroyAllWindows()
-
